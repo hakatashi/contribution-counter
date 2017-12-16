@@ -10,6 +10,10 @@ const svn = require('node-svn-ultimate');
 const concat = require('concat-stream');
 const pkg = require('./package.json');
 
+process.on('unhandledRejection', (error) => {
+	throw error;
+});
+
 class MapMap {
 	constructor() {
 		this.map = new Map();
@@ -152,7 +156,7 @@ class MapMap {
 
 			const gitPath = path.resolve(directory, '.git');
 			const repo = await Git.Repository.open(gitPath);
-			const masterCommit = await repo.getMasterCommit();
+			const masterCommit = await repo.getHeadCommit();
 			const history = masterCommit.history();
 
 			history.start();
