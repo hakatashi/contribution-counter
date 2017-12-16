@@ -43,23 +43,39 @@ class MapMap {
 
 	program
 		.version(pkg.version)
-		.usage('[options] <directory>')
+		.usage('[options] <patterns>')
 		.option('-d, --data', 'Data JSON file which read/written to', 'data.json')
 		.parse(process.argv);
 
-	const [pattern] = program.args;
-	const directories = await glob(pattern);
+	program.data = program.data || 'data.json';
 
-	let currentData = new Map();
+	const patterns = program.args;
+	const directoryMatches = await Promise.all(patterns.map((pattern) => glob(pattern)));
+
+	const directories = [].concat(...directoryMatches);
+
+	let currentData = {
+		repos: {},
+		dates: {},
+	};
+
 	if (await fs.pathExists(program.data)) {
-		const rawData = await fs.readJson(program.data);
-		currentData = new Map(Object.entries(rawData));
+		currentData = await fs.readJson(program.data);
 		await fs.move(program.data, `${program.data}.bak`, {overwrite: true});
 	}
+
+	const dateStats = new Map(Object.entries(currentData.dates));
 
 	for (const directory of directories) {
 		if (!(await fs.pathExists(directory))) {
 			console.error(`${directory} not exist`);
+			continue;
+		}
+
+		const repoPath = path.resolve(cwd, directory);
+
+		if (currentData.repos[repoPath] !== undefined) {
+			console.log(`${directory} is already stated`);
 			continue;
 		}
 
@@ -71,7 +87,59 @@ class MapMap {
 			email: new Map(),
 		};
 
-		const repoPath = path.resolve(cwd, directory);
+		const processCommit = ({name, email, message, date}) => {
+			const authorText = `${name} <${email}>`;
+
+			if (!maps.set.has(authorText)) {
+				maps.set.add(authorText);
+				maps.authorCount.set(authorText, 0);
+				maps.contributeCount.set(authorText, 0);
+				maps.name.set(authorText, name);
+				maps.email.set(authorText, email);
+			}
+
+			maps.authorCount.set(authorText, maps.authorCount.get(authorText) + 1);
+
+			const day = date.toISOString().slice(0, 10);
+			if (!dateStats.has(day)) {
+				dateStats.set(day, 0);
+			}
+
+			dateStats.set(day, dateStats.get(day) + 1);
+
+			const contributors = [];
+			let matches;
+
+			const authorRegexp = /^\s*(?:Signed-off-by|Author):\s*([^<>]+?)(?:\s*<([^<>]+?)>)?\s*$/gm;
+			while (matches = authorRegexp.exec(message)) {
+				contributors.push({
+					name: (matches[1] || '').trim(),
+					email: (matches[2] || '').trim(),
+				});
+			}
+
+			const solutionRegexp = /^\s*Solution:.+?\((.+?)\)\s*$/gm;
+			while (matches = solutionRegexp.exec(message)) {
+				contributors.push({
+					name: matches[1].trim(),
+					email: '',
+				});
+			}
+
+			for (const contributor of contributors) {
+				const contributorText = `${contributor.name} <${contributor.email}>`;
+
+				if (!maps.set.has(contributorText)) {
+					maps.set.add(contributorText);
+					maps.authorCount.set(contributorText, 0);
+					maps.contributeCount.set(contributorText, 0);
+					maps.name.set(contributorText, contributor.name);
+					maps.email.set(contributorText, contributor.email);
+				}
+
+				maps.contributeCount.set(contributorText, maps.contributeCount.get(contributorText) + 1);
+			}
+		};
 
 		if (await fs.pathExists(path.resolve(directory, '.git'))) {
 			console.log(`Detected git repository on ${directory}`);
@@ -87,35 +155,14 @@ class MapMap {
 				const author = commit.author();
 				const name = author.name();
 				const email = author.email().replace(/[<>]/g, '');
-
-				const authorText = `${name} <${email}>`;
-
-				if (!maps.set.has(authorText)) {
-					maps.set.add(authorText);
-					maps.authorCount.set(authorText, 0);
-					maps.contributeCount.set(authorText, 0);
-					maps.name.set(authorText, name);
-					maps.email.set(authorText, email);
-				}
-
-				maps.authorCount.set(authorText, maps.authorCount.get(authorText) + 1);
+				const message = commit.message();
+				const date = commit.date();
+				processCommit({name, email, message, date});
 			});
 
 			await new Promise((resolve) => {
 				history.on('end', resolve);
 			});
-
-			const result = {};
-			for (const author of maps.set) {
-				result[author] = {
-					authorCount: maps.authorCount.get(author),
-					contributeCount: maps.contributeCount.get(author),
-					name: maps.name.get(author),
-					email: maps.email.get(author),
-				}
-			}
-
-			continue;
 		}
 
 		if (await fs.pathExists(path.resolve(directory, '.hg'))) {
@@ -134,9 +181,36 @@ class MapMap {
 			});
 
 			const json = log.filter((line) => typeof line.body === 'string').map((line) => line.body).join('');
-			console.log(JSON.parse(json));
+			const commits = JSON.parse(json);
 
-			continue;
+			for (const commit of commits) {
+				const match = commit.user.match(/^\s*(.+?)\s*<(.+?)>\s*$/);
+				if (!match) {
+					continue;
+				}
+
+				const [_, name, email] = match;
+				processCommit({name, email, message: commit.desc, date: new Date(commit.date[0] * 1000)});
+			}
 		}
+
+		const result = {};
+		for (const author of maps.set) {
+			result[author] = {
+				authorCount: maps.authorCount.get(author),
+				contributeCount: maps.contributeCount.get(author),
+				name: maps.name.get(author),
+				email: maps.email.get(author),
+			};
+		}
+
+		currentData.repos[repoPath] = result;
 	}
+
+	for (const [date, count] of dateStats.entries()) {
+		currentData.dates[date] = count;
+	}
+
+	console.log(`Writing data to ${program.data}`);
+	await fs.writeJson(program.data, currentData);
 })();
