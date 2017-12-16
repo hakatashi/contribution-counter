@@ -205,10 +205,14 @@ class MapMap {
 		}
 
 		currentData.repos[repoPath] = result;
-	}
 
-	for (const [date, count] of dateStats.entries()) {
-		currentData.dates[date] = count;
+		currentData.dates = {};
+		for (const [date, count] of dateStats.entries()) {
+			currentData.dates[date] = count;
+		}
+
+		console.log(`Writing data to ${program.data}`);
+		await fs.writeJson(program.data, currentData);
 	}
 
 	console.log(`Writing data to ${program.data}`);
