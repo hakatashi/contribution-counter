@@ -291,6 +291,10 @@ class MapMap {
 			}
 		}
 
+		if (maps.set.size === 0) {
+			continue;
+		}
+
 		const result = {};
 		for (const author of maps.set) {
 			result[author] = {
