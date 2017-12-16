@@ -272,7 +272,6 @@ class MapMap {
 				let name, email;
 				if (commit.committer) {
 					const matches = commit.committer.match(/^([^<>]+?)(?:\s*<([^<>]+?)>)?$/);
-					console.log(matches);
 					if (matches) {
 						name = matches[1];
 						email = matches[2];
