@@ -19,9 +19,12 @@
   "homepage": "https://github.com/hakatashi/contribution-counter#readme",
   "dependencies": {
     "commander": "^2.12.2",
+    "concat-stream": "^1.6.0",
+    "download": "^6.2.5",
     "fs-extra": "^5.0.0",
     "glob": "^7.1.2",
     "hg": "^0.2.0",
+    "node-svn-ultimate": "^1.1.0",
     "nodegit": "^0.20.3"
   }
 }

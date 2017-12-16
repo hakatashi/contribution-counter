@@ -1,10 +1,13 @@
 const {promisify} = require('util');
+const {spawn} = require('child_process');
 const fs = require('fs-extra');
 const program = require('commander');
 const path = require('path');
 const rawGlob = require('glob');
 const Git = require('nodegit');
 const {HGRepo} = require('hg');
+const svn = require('node-svn-ultimate');
+const concat = require('concat-stream');
 const pkg = require('./package.json');
 
 class MapMap {
@@ -88,6 +91,9 @@ class MapMap {
 		};
 
 		const processCommit = ({name, email, message, date}) => {
+			name = name.replace(/[<>]/g, '');
+			email = email.replace(/[<>]/g, '');
+
 			const authorText = `${name} <${email}>`;
 
 			if (!maps.set.has(authorText)) {
@@ -154,7 +160,7 @@ class MapMap {
 			history.on('commit', (commit) => {
 				const author = commit.author();
 				const name = author.name();
-				const email = author.email().replace(/[<>]/g, '');
+				const email = author.email();
 				const message = commit.message();
 				const date = commit.date();
 				processCommit({name, email, message, date});
@@ -191,6 +197,94 @@ class MapMap {
 
 				const [_, name, email] = match;
 				processCommit({name, email, message: commit.desc, date: new Date(commit.date[0] * 1000)});
+			}
+		}
+
+		if (await fs.pathExists(path.resolve(directory, '.svn'))) {
+			console.log(`Detected svn repository on ${directory}`);
+
+			const {logentry} = await new Promise((resolve, reject) => {
+				svn.commands.log(directory, (error, log) => {
+					if (error) {
+						reject(error);
+					} else {
+						resolve(log);
+					}
+				});
+			});
+
+			for (const commit of logentry) {
+				processCommit({name: commit.author, email: '', message: commit.msg, date: new Date(commit.date)});
+			}
+		}
+
+		if (await fs.pathExists(path.resolve(directory, '.bzr'))) {
+			console.log(`Detected bazaar repository on ${directory}`);
+
+			const bzr = spawn('bzr', ['log', '-n0', '--long'], {
+				cwd: repoPath,
+			});
+
+			const rawLog = await new Promise((resolve, reject) => {
+				const concatter = concat(resolve);
+				bzr.stdout.on('error', reject);
+				bzr.stdout.pipe(concatter);
+			});
+
+			let currentEntry = null;
+			let currentCommit = {};
+			const commits = [];
+			for (const line of rawLog.toString().split('\n')) {
+				if (line.includes('----------------')) {
+					commits.push(currentCommit);
+					currentEntry = null;
+					currentCommit = {};
+					continue;
+				}
+
+				if (line.startsWith('message:')) {
+					currentEntry = 'message';
+					currentCommit.message = '';
+					continue;
+				}
+
+				if (currentEntry === 'message') {
+					currentCommit.message += `${line}\n`;
+					continue;
+				}
+
+				if (line.includes(': ')) {
+					const matches = line.match(/^(.+?): (.+)$/);
+					if (!matches) {
+						continue;
+					}
+					currentEntry = matches[1].trim();
+					currentCommit[currentEntry] = matches[2].trim();
+					continue;
+				}
+			}
+
+			if (currentCommit.committer) {
+				commits.push(currentCommit);
+			}
+
+			for (const commit of commits) {
+				let name, email;
+				if (commit.committer) {
+					const matches = commit.committer.match(/^([^<>]+?)(?:\s*<([^<>]+?)>)?$/);
+					console.log(matches);
+					if (matches) {
+						name = matches[1];
+						email = matches[2];
+					}
+				}
+
+				processCommit({
+					name: name || '',
+					email: email || '',
+					message: commit.message || '',
+					date: commit.timestamp ? new Date(commit.timestamp) : new Date(),
+				});
 			}
 		}
 
