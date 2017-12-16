@@ -16,5 +16,11 @@
   "bugs": {
     "url": "https://github.com/hakatashi/contribution-counter/issues"
   },
-  "homepage": "https://github.com/hakatashi/contribution-counter#readme"
+  "homepage": "https://github.com/hakatashi/contribution-counter#readme",
+  "dependencies": {
+    "commander": "^2.12.2",
+    "fs-extra": "^5.0.0",
+    "glob": "^7.1.2",
+    "nodegit": "^0.20.3"
+  }
 }
