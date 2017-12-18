@@ -63,6 +63,7 @@ class MapMap {
 
 	let currentData = {
 		repos: {},
+		specials: {},
 		dates: {},
 	};
 
