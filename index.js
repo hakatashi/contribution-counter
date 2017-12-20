@@ -51,10 +51,12 @@ class MapMap {
 	program
 		.version(pkg.version)
 		.usage('[options] <patterns>')
-		.option('-d, --data', 'Data JSON file which read/written to', 'data.json')
+		.option('-d, --data [datafile]', 'Data JSON file which read/written to', 'data.json')
+		.option('-f, --overwrite', 'overwrite existing entry with new data', false)
 		.parse(process.argv);
 
 	program.data = program.data || 'data.json';
+	program.overwrite = Boolean(program.overwrite);
 
 	const patterns = program.args;
 	const directoryMatches = await Promise.all(patterns.map((pattern) => glob(pattern)));
@@ -82,7 +84,7 @@ class MapMap {
 
 		const repoPath = path.resolve(cwd, directory);
 
-		if (currentData.repos[repoPath] !== undefined) {
+		if (currentData.repos[repoPath] !== undefined && !program.overwrite) {
 			console.log(`${directory} is already stated`);
 			continue;
 		}
