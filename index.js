@@ -221,7 +221,7 @@ class MapMap {
 			});
 
 			for (const commit of logentry) {
-				if (!commit.author || !commit.email || !commit.date) {
+				if (!commit.author || !commit.date) {
 					continue;
 				}
 				processCommit({name: commit.author, email: '', message: commit.msg, date: new Date(commit.date)});
