@@ -194,7 +194,13 @@ class MapMap {
 			});
 
 			const json = log.filter((line) => typeof line.body === 'string').map((line) => line.body).join('');
-			const commits = JSON.parse(json);
+			const commits = (() => {
+				try {
+					return JSON.parse(json);
+				} catch (e) {
+					return [];
+				}
+			})();
 
 			for (const commit of commits) {
 				const match = commit.user.match(/^\s*(.+?)\s*<(.+?)>\s*$/);
